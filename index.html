@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Focus Flow</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+  <style>
+    .glass-card { background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.2); }
+    .nav-btn.active { color: #f59e0b; }
+    .color-swatch.selected { box-shadow: 0 0 0 3px #f59e0b; }
+    .task-checkbox { width: 1.5rem; height: 1.5rem; appearance: none; background-color: rgba(255,255,255,0.1); border-radius: 0.375rem; cursor: pointer; transition: background-color 0.2s; }
+    .task-checkbox:checked { background-color: #f59e0b; background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3e%3c/svg%3e"); }
+  </style>
+</head>
+<body class="bg-slate-900 bg-gradient-to-br from-indigo-800 via-purple-800 to-pink-800 text-slate-100 font-sans flex flex-col items-center min-h-screen pb-24">
+
+<header class="w-full max-w-lg h-16"></header>
+
+<!-- MAIN APP VIEW -->
+<main id="app-container" class="w-full max-w-lg flex-grow px-4 space-y-8">
+  <!-- TIMER VIEW -->
+  <div id="timer-view">
+    <section class="relative w-72 h-72 mx-auto flex flex-col items-center justify-center">
+      <svg class="absolute inset-0 w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+        <circle class="text-white/10" stroke-width="5" stroke="currentColor" fill="transparent" r="47" cx="50" cy="50"/>
+        <circle id="progress-ring" class="text-amber-400" stroke-width="5" stroke-linecap="round" stroke="currentColor" fill="transparent" r="47" cx="50" cy="50" style="stroke-dasharray: 295.31; stroke-dashoffset: 295.31; transition: stroke-dashoffset 1s linear;"/>
+      </svg>
+      <!-- Added z-10 to ensure the select is on top of other elements -->
+      <select id="taskSelect" class="text-lg font-bold bg-slate-800/80 text-white text-center w-4/5 focus:outline-none appearance-none mb-2 rounded-lg px-4 py-2 cursor-pointer hover:bg-slate-700/80 transition-colors z-10"></select>
+      <div id="timerDisplay" class="text-4xl font-thin font-mono text-white tracking-wider">00:00:00</div>
+    </section>
+
+    <section class="mt-8 flex justify-center items-center gap-6">
+      <button id="startBtn" class="bg-white/10 text-white w-20 h-20 rounded-full text-3xl flex items-center justify-center shadow-lg hover:bg-white/20 transition disabled:opacity-50"><i class="fas fa-play"></i></button>
+      <button id="pauseBtn" class="bg-white/10 text-white w-16 h-16 rounded-full text-2xl flex items-center justify-center shadow-lg hover:bg-white/20 transition disabled:opacity-50"><i class="fas fa-pause"></i></button>
+      <button id="stopBtn" class="bg-white/10 text-white w-16 h-16 rounded-full text-2xl flex items-center justify-center shadow-lg hover:bg-white/20 transition disabled:opacity-50"><i class="fas fa-stop"></i></button>
+    </section>
+
+    <section class="mt-8 space-y-6">
+      <div>
+        <h2 class="font-bold text-white mb-2">To Do</h2>
+        <div id="todo-list" class="space-y-2"></div>
+      </div>
+      <div>
+        <h2 class="font-bold text-white mb-2">Completed Today</h2>
+        <div id="completed-today-list" class="space-y-2"></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- REPORTS VIEW -->
+  <div id="reports-view" class="hidden"><h1 class="text-3xl font-bold text-white">Reports</h1></div>
+</main>
+
+<!-- NAV -->
+<nav id="main-nav" class="fixed bottom-0 left-0 right-0 w-full max-w-lg mx-auto h-20 glass-card rounded-t-3xl flex justify-around items-center">
+  <button class="nav-btn text-2xl text-slate-300 p-4" data-view="timer-view"><i class="fas fa-home"></i></button>
+  <button id="addTaskBtn" class="text-3xl bg-amber-500 text-white w-16 h-16 rounded-full shadow-lg -mt-12 flex items-center justify-center"><i class="fas fa-plus"></i></button>
+  <button class="nav-btn text-2xl text-slate-300 p-4" data-view="reports-view"><i class="fas fa-chart-pie"></i></button>
+</nav>
+
+<!-- MODAL -->
+<div id="taskModal" class="fixed inset-0 bg-black/70 flex items-center justify-center p-4 hidden">
+  <div class="glass-card rounded-2xl p-6 w-full max-w-md space-y-4 border-none shadow-2xl">
+    <h3 id="taskModalTitle" class="text-xl font-bold text-white">Add New Task</h3>
+    <input type="text" id="taskNameInput" placeholder="Task Name" class="w-full bg-slate-700/50 border-slate-600 rounded-lg p-3">
+    <div>
+      <label class="block text-sm text-slate-400 mb-1">Due Date (Optional)</label>
+      <div class="flex gap-2">
+        <input type="date" id="taskDateInput" class="w-full bg-slate-700/50 border-slate-600 rounded-lg p-3">
+        <input type="time" id="taskTimeInput" class="w-full bg-slate-700/50 border-slate-600 rounded-lg p-3">
+      </div>
+    </div>
+    <div>
+      <label class="block text-sm text-slate-400 mb-2">Color</label>
+      <div id="color-palette" class="flex gap-3 flex-wrap"></div>
+    </div>
+    <div class="flex justify-end gap-2">
+      <button id="cancelTaskBtn" class="bg-slate-600/50 font-semibold py-2 px-4 rounded-lg hover:bg-slate-500/50 transition">Cancel</button>
+      <button id="saveTaskBtn" class="bg-amber-500 text-slate-900 font-bold py-2 px-4 rounded-lg hover:bg-amber-400 transition">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- FOCUS TIMER VIEW -->
+<div id="focus-view" class="fixed inset-0 bg-slate-900 bg-gradient-to-br from-indigo-800 via-purple-800 to-pink-800 hidden flex-col items-center justify-center text-white p-4">
+    <p class="text-xl text-slate-400 mb-2">Timing task:</p>
+    <h2 id="focusTaskName" class="text-3xl font-bold mb-8 text-center px-4"></h2>
+    <div id="focusTimerDisplay" class="text-7xl md:text-8xl font-thin font-mono tracking-wider mb-12">00:00:00</div>
+    <div class="flex justify-center items-center gap-6">
+        <button id="focusPauseBtn" class="bg-white/10 text-white w-20 h-20 rounded-full text-3xl flex items-center justify-center shadow-lg hover:bg-white/20 transition disabled:opacity-50"><i class="fas fa-pause"></i></button>
+        <button id="focusStopBtn" class="bg-white/10 text-white w-20 h-20 rounded-full text-3xl flex items-center justify-center shadow-lg hover:bg-white/20 transition disabled:opacity-50"><i class="fas fa-stop"></i></button>
+    </div>
+</div>
+
+
+<script src="https://cdn.jsdelivr.net/npm/idb@7/build/iife/index-min.js"></script>
+<script>
+/* ===============================
+   STATE & ELEMENTS
+=============================== */
+let db;
+let seconds = 0;
+let timer = null;
+let isRunning = false;
+let currentlyEditingTaskId = null;
+const COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899'];
+let selectedTaskColor = COLORS[0];
+
+// In-memory storage as fallback
+let tasks = [];
+let history = [];
+
+const DOM = {
+  // Main view
+  appContainer: document.getElementById('app-container'),
+  mainNav: document.getElementById('main-nav'),
+  timerDisplay: document.getElementById('timerDisplay'),
+  startBtn: document.getElementById('startBtn'),
+  pauseBtn: document.getElementById('pauseBtn'),
+  stopBtn: document.getElementById('stopBtn'),
+  progressRing: document.getElementById('progress-ring'),
+  taskSelect: document.getElementById('taskSelect'),
+  todoList: document.getElementById('todo-list'),
+  completedTodayList: document.getElementById('completed-today-list'),
+  navButtons: document.querySelectorAll('.nav-btn'),
+  // Modal
+  addTaskBtn: document.getElementById('addTaskBtn'),
+  taskModal: document.getElementById('taskModal'),
+  taskModalTitle: document.getElementById('taskModalTitle'),
+  taskNameInput: document.getElementById('taskNameInput'),
+  taskDateInput: document.getElementById('taskDateInput'),
+  taskTimeInput: document.getElementById('taskTimeInput'),
+  saveTaskBtn: document.getElementById('saveTaskBtn'),
+  cancelTaskBtn: document.getElementById('cancelTaskBtn'),
+  colorPalette: document.getElementById('color-palette'),
+  // Focus view
+  focusView: document.getElementById('focus-view'),
+  focusTaskName: document.getElementById('focusTaskName'),
+  focusTimerDisplay: document.getElementById('focusTimerDisplay'),
+  focusPauseBtn: document.getElementById('focusPauseBtn'),
+  focusStopBtn: document.getElementById('focusStopBtn'),
+};
+
+const radius = DOM.progressRing.r.baseVal.value;
+const circumference = 2 * Math.PI * radius;
+DOM.progressRing.style.strokeDasharray = circumference;
+
+/* ===============================
+   DATABASE ABSTRACTION
+=============================== */
+const Database = {
+  async getAll(store) {
+    if (db) {
+      return await db.getAll(store);
+    }
+    return store === 'tasks' ? tasks : history;
+  },
+  
+  async get(store, id) {
+    if (db) {
+      return await db.get(store, id);
+    }
+    const data = store === 'tasks' ? tasks : history;
+    return data.find(item => item.id === id);
+  },
+  
+  async put(store, data) {
+    if (db) {
+      return await db.put(store, data);
+    }
+    const array = store === 'tasks' ? tasks : history;
+    const index = array.findIndex(item => item.id === data.id);
+    if (index >= 0) {
+      array[index] = data;
+    } else {
+      array.push(data);
+    }
+    return data;
+  },
+  
+  async add(store, data) {
+    if (db) {
+      return await db.add(store, data);
+    }
+    if (!data.id) {
+      data.id = Date.now() + Math.random();
+    }
+    const array = store === 'tasks' ? tasks : history;
+    array.push(data);
+    return data;
+  }
+};
+
+/* ===============================
+   UTILITIES
+=============================== */
+const formatTime = sec => `${String(Math.floor(sec/3600)).padStart(2,'0')}:${String(Math.floor((sec%3600)/60)).padStart(2,'0')}:${String(sec%60).padStart(2,'0')}`;
+const isSameDay = (d1,d2) => d1.getFullYear()===d2.getFullYear() && d1.getMonth()===d2.getMonth() && d1.getDate()===d2.getDate();
+
+/* ===============================
+   UI
+=============================== */
+function switchView(viewId){
+  ['timer-view','reports-view'].forEach(id=>document.getElementById(id).classList.toggle('hidden',id!==viewId));
+  DOM.navButtons.forEach(btn=>btn.classList.toggle('active',btn.dataset.view===viewId));
+}
+
+async function renderAll(){
+  await renderDashboard();
+  await populateTaskDropdown();
+  updateTimerUI();
+}
+
+async function renderDashboard(){
+  const allTasks = await Database.getAll('tasks');
+  const today = new Date();
+  
+  const todo = allTasks.filter(t => !t.completed);
+  DOM.todoList.innerHTML = todo.length ? todo.map(t => {
+    const dueToday = t.dueDate && isSameDay(new Date(t.dueDate), today);
+    return `<div class="glass-card rounded-lg p-3 flex items-center gap-3 border-l-4" style="border-left-color:${t.color};">
+      <input type="checkbox" class="task-checkbox" data-task-id="${t.id}">
+      <div class="flex-grow">
+        <span class="font-semibold">${t.name}</span>
+        ${dueToday ? '<p class="text-xs text-amber-400">Due Today</p>' : ''}
+      </div>
+      <button class="edit-btn text-slate-400 hover:text-white" data-task-id="${t.id}">
+        <i class="fas fa-pencil-alt"></i>
+      </button>
+    </div>`;
+  }).join('') : '<p class="text-slate-400 text-center p-2">No tasks to do. Add one!</p>';
+  
+  const done = allTasks.filter(t => t.completed && t.completedDate && isSameDay(new Date(t.completedDate), today));
+  DOM.completedTodayList.innerHTML = done.length ? done.map(t => 
+    `<div class="glass-card rounded-lg p-3 flex items-center gap-3 border-l-4 opacity-60" style="border-left-color:${t.color};">
+      <input type="checkbox" class="task-checkbox" data-task-id="${t.id}" checked>
+      <span class="flex-grow line-through">${t.name}</span>
+    </div>`
+  ).join('') : '<p class="text-slate-400 text-center p-2">No tasks completed yet today.</p>';
+}
+
+async function populateTaskDropdown(){
+  const allTasks = await Database.getAll('tasks');
+  const uncompleted = allTasks.filter(t => !t.completed);
+  
+  DOM.taskSelect.innerHTML = uncompleted.length ? 
+    `<option value="" disabled selected>Select a task</option>` + 
+    uncompleted.map(t => `<option value="${t.id}">${t.name}</option>`).join('')
+    : '<option disabled selected>Add a task to begin</option>';
+}
+
+function renderColorPalette(selected){
+  DOM.colorPalette.innerHTML = COLORS.map(c => 
+    `<button class="color-swatch w-8 h-8 rounded-full" style="background-color:${c};" data-color="${c}"></button>`
+  ).join('');
+  
+  const selectedEl = DOM.colorPalette.querySelector(`[data-color="${selected}"]`);
+  if(selectedEl) selectedEl.classList.add('selected');
+}
+
+/* ===============================
+   TASKS
+=============================== */
+async function openTaskModal(id = null){
+  currentlyEditingTaskId = id;
+  
+  if(id){
+    DOM.taskModalTitle.textContent = 'Edit Task';
+    const task = await Database.get('tasks', id);
+    DOM.taskNameInput.value = task.name;
+    
+    if(task.dueDate){
+      const d = new Date(task.dueDate);
+      DOM.taskDateInput.value = d.toISOString().split('T')[0];
+      DOM.taskTimeInput.value = d.toTimeString().slice(0,5);
+    } else {
+      DOM.taskDateInput.value = '';
+      DOM.taskTimeInput.value = '';
+    }
+    selectedTaskColor = task.color;
+  } else {
+    DOM.taskModalTitle.textContent = 'Add New Task';
+    DOM.taskNameInput.value = '';
+    DOM.taskDateInput.value = '';
+    DOM.taskTimeInput.value = '';
+    selectedTaskColor = COLORS[0];
+  }
+  
+  renderColorPalette(selectedTaskColor);
+  DOM.taskModal.classList.remove('hidden');
+}
+
+function closeTaskModal(){
+  DOM.taskModal.classList.add('hidden');
+}
+
+async function handleSaveTask(){
+  const name = DOM.taskNameInput.value.trim();
+  if(!name) return;
+  
+  const date = DOM.taskDateInput.value;
+  const time = DOM.taskTimeInput.value;
+  const due = date && time ? new Date(`${date}T${time}`).toISOString() : null;
+  
+  let data;
+  if(currentlyEditingTaskId){
+    const t = await Database.get('tasks', currentlyEditingTaskId);
+    data = { ...t, name, dueDate: due, color: selectedTaskColor };
+  } else {
+    data = {
+      id: Date.now(),
+      name,
+      dueDate: due,
+      color: selectedTaskColor,
+      completed: false,
+      completedDate: null
+    };
+  }
+  
+  await Database.put('tasks', data);
+  closeTaskModal();
+  await renderAll();
+}
+
+async function handleToggleCompletion(id){
+  const t = await Database.get('tasks', id);
+  if(t){
+    t.completed = !t.completed;
+    t.completedDate = t.completed ? new Date().toISOString() : null;
+    await Database.put('tasks', t);
+    await renderAll();
+  }
+}
+
+/* ===============================
+   TIMER
+=============================== */
+function updateTimerUI(){
+  const timeString = formatTime(seconds);
+  DOM.timerDisplay.textContent = timeString;
+  DOM.focusTimerDisplay.textContent = timeString;
+
+  const offset = circumference - ((seconds % 60) / 60) * circumference;
+  DOM.progressRing.style.strokeDashoffset = offset;
+  
+  const canInteract = (seconds === 0 && !isRunning);
+
+  DOM.startBtn.disabled = isRunning || !DOM.taskSelect.value;
+  DOM.pauseBtn.disabled = !isRunning;
+  DOM.stopBtn.disabled = canInteract;
+  
+  DOM.focusPauseBtn.disabled = !isRunning;
+  DOM.focusStopBtn.disabled = canInteract;
+}
+
+async function stopAndLog(){
+  isRunning = false;
+  clearInterval(timer);
+  
+  if(seconds > 0 && DOM.taskSelect.value){
+    const id = Number(DOM.taskSelect.value);
+    const t = await Database.get('tasks', id);
+    
+    if(t){
+      await Database.add('history', {
+        taskId: t.id,
+        taskName: t.name,
+        duration: seconds,
+        timestamp: new Date().toISOString()
+      });
+    }
+  }
+  
+  seconds = 0;
+  
+  // Exit focus view
+  DOM.focusView.classList.add('hidden');
+  DOM.focusView.classList.remove('flex');
+  DOM.appContainer.classList.remove('hidden');
+  DOM.mainNav.classList.remove('hidden');
+
+  updateTimerUI();
+}
+
+/* ===============================
+   EVENTS
+=============================== */
+function setupEventListeners(){
+  DOM.startBtn.addEventListener('click', () => {
+    if(!isRunning && DOM.taskSelect.value){
+      isRunning = true;
+      timer = setInterval(() => {
+        seconds++;
+        updateTimerUI();
+      }, 1000);
+      
+      // Enter focus view
+      const taskName = DOM.taskSelect.options[DOM.taskSelect.selectedIndex].text;
+      DOM.focusTaskName.textContent = taskName;
+      DOM.appContainer.classList.add('hidden');
+      DOM.mainNav.classList.add('hidden');
+      DOM.focusView.classList.add('flex');
+      DOM.focusView.classList.remove('hidden');
+
+      updateTimerUI();
+    }
+  });
+  
+  DOM.pauseBtn.addEventListener('click', () => {
+    if(isRunning){
+      isRunning = false;
+      clearInterval(timer);
+      updateTimerUI();
+    }
+  });
+  
+  DOM.stopBtn.addEventListener('click', stopAndLog);
+
+  // Focus view button events
+  DOM.focusPauseBtn.addEventListener('click', () => DOM.pauseBtn.click());
+  DOM.focusStopBtn.addEventListener('click', () => DOM.stopBtn.click());
+
+  DOM.taskSelect.addEventListener('change', updateTimerUI);
+  DOM.addTaskBtn.addEventListener('click', () => openTaskModal());
+  DOM.saveTaskBtn.addEventListener('click', handleSaveTask);
+  DOM.cancelTaskBtn.addEventListener('click', closeTaskModal);
+  
+  DOM.navButtons.forEach(btn => 
+    btn.addEventListener('click', () => switchView(btn.dataset.view))
+  );
+  
+  DOM.colorPalette.addEventListener('click', e => {
+    if(e.target.matches('.color-swatch')){
+      selectedTaskColor = e.target.dataset.color;
+      document.querySelectorAll('.color-swatch').forEach(s => 
+        s.classList.remove('selected')
+      );
+      e.target.classList.add('selected');
+    }
+  });
+  
+  const mainArea = document.getElementById('timer-view');
+  mainArea.addEventListener('click', e => {
+    const edit = e.target.closest('.edit-btn');
+    if(edit) openTaskModal(Number(edit.dataset.taskId));
+  });
+  
+  mainArea.addEventListener('change', e => {
+    const cb = e.target.closest('.task-checkbox');
+    if(cb) handleToggleCompletion(Number(cb.dataset.taskId));
+  });
+}
+
+/* ===============================
+   INIT
+=============================== */
+async function initializeDatabase() {
+  try {
+    if (typeof window !== 'undefined' && window.idb && window.idb.openDB) {
+      db = await window.idb.openDB('FocusFlowDB', 1, {
+        upgrade(database) {
+          if (!database.objectStoreNames.contains('tasks')) {
+            database.createObjectStore('tasks', { keyPath: 'id' });
+          }
+          if (!database.objectStoreNames.contains('history')) {
+            database.createObjectStore('history', { keyPath: 'id', autoIncrement: true });
+          }
+        }
+      });
+      console.log('IndexedDB initialized successfully');
+    } else {
+      console.log('IndexedDB not available, using in-memory storage');
+      db = null;
+    }
+  } catch (error) {
+    console.error('Failed to initialize IndexedDB, falling back to in-memory storage:', error);
+    db = null;
+  }
+}
+
+async function main(){
+  console.log('🚀 App initializing...');
+  await initializeDatabase();
+  setupEventListeners();
+  
+  // Add some sample data if no tasks exist
+  const existingTasks = await Database.getAll('tasks');
+  if (existingTasks.length === 0) {
+    console.log('📝 Adding sample tasks...');
+    // Using Date.now() for more robust and unique IDs
+    await Database.put('tasks', {
+      id: Date.now(),
+      name: 'Study JavaScript',
+      dueDate: null,
+      color: COLORS[0],
+      completed: false,
+      completedDate: null
+    });
+    await Database.put('tasks', {
+      id: Date.now() + 1, // Ensure unique ID
+      name: 'Work on Project',
+      dueDate: null,
+      color: COLORS[1],
+      completed: false,
+      completedDate: null
+    });
+  }
+  
+  await renderAll();
+  switchView('timer-view');
+  console.log('✅ App initialization complete');
+}
+
+// Wait for both DOM and the idb script to load
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    // Add small delay to ensure idb script is fully loaded
+    setTimeout(main, 100);
+  });
+} else {
+  setTimeout(main, 100);
+}
+</script>
+
+</body>
+</html>
